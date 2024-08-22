@@ -31,7 +31,13 @@ export type MongoDBStoreOptions = (CommonMongoDBStoreOptions & {
         user?: never;
         password?: never;
         authSource?: never;
-    });
+});
+
+type MongoDBStoreEntry = {
+    _id: string,
+    counter: number,
+    expirationDate: Date
+};
 
 export class MongoDBStore implements Store {
 
@@ -54,28 +60,47 @@ export class MongoDBStore implements Store {
         }
     }
 
-    /**
-     * Method that actually initializes the store.
-     *
-     * @param options {Options} - The options used to setup express-rate-limit.
-     *
-     * @public
-     */
     init(options: Options): void {
         this.windowMs = options.windowMs;
     }
 
-    /**
-     * Method to prefix the keys with the given text.
-     *
-     * Call this from get, increment, decrement, resetKey, etc.
-     *
-     * @param key {string} - The key.
-     *
-     * @returns {string} - The text + the key.
-     */
     prefixKey(key: string): string {
         return `${this.prefix}${key}`
+    }
+
+    async increment(key: string): Promise<IncrementResponse> {
+
+        const record = await this.incrementOrDecrement(key, 1);
+        
+        return ({
+            totalHits: record.counter,
+            resetTime: record.expirationDate
+        });
+    }
+
+    async decrement(key: string): Promise<void> {
+        this.incrementOrDecrement(key, -1);
+    }
+
+    private async incrementOrDecrement(key: string, byValue: number): Promise<MongoDBStoreEntry> {
+        const collection = await this.getCollection();
+
+        const modifier: {
+            $inc: {counter: number},
+            $set?: {expirationDate: Date},
+            $setOnInsert?: {expirationDate: Date}
+        } = {
+            $inc: {counter: byValue}
+        };
+
+        const newExpiry = new Date(Date.now() + (this.storeOptions.expireTimeMs ?? 60000));
+
+        modifier[this.storeOptions.resetExpireDateOnChange ? "$set" : "$setOnInsert"] = {expirationDate: newExpiry};
+
+        const result = await collection.findOneAndUpdate({_id: this.prefixKey(key) as any}, modifier, {upsert: true, returnDocument: 'after'});
+        const record = result.value as unknown as MongoDBStoreEntry;
+
+        return record;
     }
 
     private getCollection(): Promise<Collection> {
@@ -93,7 +118,7 @@ export class MongoDBStore implements Store {
             this.collectionState = "initializing";
 
             try {
-                
+
                 this.collection = await this.createCollection();
 
                 if (typeof this.storeOptions.createTtlIndex == "undefined" || this.storeOptions.createTtlIndex) {
@@ -126,7 +151,7 @@ export class MongoDBStore implements Store {
 
     private async createCollection() {
 
-        const dbName = this.storeOptions.uri?.split("/").pop()?.split("?")[0];
+        const dbName = this.storeOptions.uri?.split("/").pop()?.split("?")[0]; // remove any query parameters from end of uri as well
 
         let connectionOptions: MongoClientOptions = {};
 
@@ -152,8 +177,6 @@ export class MongoDBStore implements Store {
     }
 
     get?: ((key: string) => Promise<ClientRateLimitInfo | undefined> | ClientRateLimitInfo | undefined) | undefined;
-    increment: (key: string) => Promise<IncrementResponse> | IncrementResponse;
-    decrement: (key: string) => Promise<void> | void;
     resetKey: (key: string) => Promise<void> | void;
     resetAll?: (() => Promise<void> | void) | undefined;
     shutdown?: (() => Promise<void> | void) | undefined;
