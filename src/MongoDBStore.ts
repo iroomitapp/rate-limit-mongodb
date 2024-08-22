@@ -6,14 +6,17 @@ import type {
 } from 'express-rate-limit';
 import { Collection, MongoClientOptions, MongoClient, Document } from 'mongodb';
 
+// Options regardless if we're passed a collection, or if we're to connect and initialize the collection ourself
 type CommonMongoDBStoreOptions = {
     prefix?: string;
     resetExpireDateOnChange?: boolean;
     createTtlIndex?: boolean;
-    errorHandler?: () => void;
 };
 
-export type MongoDBStoreOptions = (CommonMongoDBStoreOptions & {
+export type MongoDBStoreOptions =
+
+// Passed a uri and we should connect to the collection ourselves
+(CommonMongoDBStoreOptions & {
     uri: string;
     collectionName?: string;
     collection?: never; // Ensures `collection` is not used in this variant
@@ -22,7 +25,10 @@ export type MongoDBStoreOptions = (CommonMongoDBStoreOptions & {
     password?: string;
     authSource?: string;
 })
-    | (CommonMongoDBStoreOptions & {
+    |
+
+// Passed a MongoDB collection directly
+(CommonMongoDBStoreOptions & {
         collection: Collection;
         uri?: never; // Ensures `uri` is not used in this variant
         collectionName?: never; // Ensures `collectionName` is not used in this variant
@@ -33,25 +39,36 @@ export type MongoDBStoreOptions = (CommonMongoDBStoreOptions & {
 });
 
 type MongoDBStoreEntry = {
-    _id: string,
+    _id: string, // Usually an ObjectId is used in the _id field for MongoDB, but the rate-limit key works better in this case
     counter: number,
     expirationDate: Date
 };
 
 export class MongoDBStore implements Store {
 
+    /* Number of MS to wait before calls can be made again once limit is reached */
     windowMs!: number;
 
+    /* Set a prefix on the _id value added to MongoDB */
     prefix!: string;
 
+    /* Stores a reference to the options passed to the constructor of this store */
     storeOptions!: MongoDBStoreOptions;
 
+    /* Stores a reference to the collection */
     collection?: Collection;
 
+    /* MongoDB client used to connect to the collection, if one isn't explicitly provided */
     client?: MongoClient;
 
+    /* getCollection may be called by increment and decrement before the collection is ready.
+     * We only want the connection logic to run once, so if getCollection is called while we're waiting
+     * on a collection, we store the resolve and reject methods of the subsequent calls so we can resolve/reject
+     * them along with the single call responsible for connection.
+     */
     resolveOrRejectOnCollectionCreation: ([(value: Collection<Document>) => void, (reason?: any) => void])[] = [];
 
+    /* State if MongoDB collection is ready for use */
     collectionState: "uninitialized" | "initializing" | "initialized" = "uninitialized";
 
     constructor(options: MongoDBStoreOptions) {
@@ -98,6 +115,18 @@ export class MongoDBStore implements Store {
                 resetTime: record.expirationDate
             });
         }
+    }
+
+    async resetKey(key: string): Promise<void> {
+        const collection = await this.getCollection();
+
+        await collection.deleteOne({_id: this.prefixKey(key) as any}); 
+    }
+
+    async resetAll(): Promise<void> {
+        const collection = await this.getCollection();
+        
+        await collection.deleteMany({});
     }
 
     private async incrementOrDecrement(key: string, byValue: number): Promise<MongoDBStoreEntry> {
@@ -148,7 +177,7 @@ export class MongoDBStore implements Store {
                 resolve(this.collection);
 
                 for (let rslvRjct of this.resolveOrRejectOnCollectionCreation) {
-                    rslvRjct[0](this.collection as Collection);
+                    rslvRjct[0](this.collection as Collection); // resolve any pending calls to this function as well
                 }
             } catch (e) {
 
@@ -175,7 +204,7 @@ export class MongoDBStore implements Store {
 
         connectionOptions.authSource = this.storeOptions.authSource ?? dbName;
 
-        if (this.storeOptions.user) {
+        if (this.storeOptions.user) { // could technically have a blank password, so we won't check for one
             connectionOptions.auth = {
                 username: this.storeOptions.user,
                 password: this.storeOptions.password
@@ -193,8 +222,4 @@ export class MongoDBStore implements Store {
 
         return collection;
     }
-
-    resetKey: (key: string) => Promise<void> | void;
-    resetAll?: (() => Promise<void> | void) | undefined;
-    shutdown?: (() => Promise<void> | void) | undefined;
 }
