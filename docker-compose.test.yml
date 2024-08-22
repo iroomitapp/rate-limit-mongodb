@@ -1,0 +1,5 @@
+services:
+  irmt-rate-limit-mongodb-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test

@@ -1,0 +1,21 @@
+# Using a Debian build
+FROM node:20
+
+# Installing "libcurl4" because some Debian images may not come with this package installed, but is required by the mongodb binaries
+RUN apt-get install libcurl4
+
+WORKDIR /testbench
+
+# Copy the project (all files) into the image into "/project" as user "node:node"
+# User "node:node" is the default nodejs user in the docker images
+COPY . /testbench/
+
+RUN npm install -g pnpm
+RUN chown -R node:node /testbench
+
+# Explicitly set the user that will be used for the next Instructions and ENTRYPOINT
+USER node
+
+RUN pnpm install --frozen-lockfile
+
+ENTRYPOINT ["pnpm", "test"]

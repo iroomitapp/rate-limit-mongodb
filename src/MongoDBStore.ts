@@ -169,7 +169,7 @@ export class MongoDBStore implements Store {
                 this.collection = await this.createCollection();
 
                 if (typeof this.storeOptions.createTtlIndex == "undefined" || this.storeOptions.createTtlIndex) {
-                    this.collection.createIndex({expirationDate: 1}, {expireAfterSeconds: 0});
+                    await this.collection.createIndex({expirationDate: 1}, {expireAfterSeconds: 0});
                 }
                 
                 this.collectionState = "initialized";
