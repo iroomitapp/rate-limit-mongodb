@@ -8,7 +8,6 @@ import { Collection, MongoClientOptions, MongoClient, Document } from 'mongodb';
 
 type CommonMongoDBStoreOptions = {
     prefix?: string;
-    expireTimeMs?: number;
     resetExpireDateOnChange?: boolean;
     createTtlIndex?: boolean;
     errorHandler?: () => void;
@@ -41,12 +40,18 @@ type MongoDBStoreEntry = {
 
 export class MongoDBStore implements Store {
 
-    windowMs!: number
-    prefix!: string
-    storeOptions!: MongoDBStoreOptions
-    collection?: Collection
-    client?: MongoClient
+    windowMs!: number;
+
+    prefix!: string;
+
+    storeOptions!: MongoDBStoreOptions;
+
+    collection?: Collection;
+
+    client?: MongoClient;
+
     resolveOrRejectOnCollectionCreation: ([(value: Collection<Document>) => void, (reason?: any) => void])[] = [];
+
     collectionState: "uninitialized" | "initializing" | "initialized" = "uninitialized";
 
     constructor(options: MongoDBStoreOptions) {
@@ -65,7 +70,7 @@ export class MongoDBStore implements Store {
     }
 
     prefixKey(key: string): string {
-        return `${this.prefix}${key}`
+        return `${this.prefix}${key}`;
     }
 
     async increment(key: string): Promise<IncrementResponse> {
@@ -79,7 +84,20 @@ export class MongoDBStore implements Store {
     }
 
     async decrement(key: string): Promise<void> {
-        this.incrementOrDecrement(key, -1);
+        await this.incrementOrDecrement(key, -1);
+    }
+
+    async get(key: string): Promise<ClientRateLimitInfo | undefined> {
+        const collection = await this.getCollection();
+        
+        const record = await collection.findOne({_id: this.prefixKey(key) as any}) as unknown as (MongoDBStoreEntry | undefined);
+
+        if (record) {
+            return ({
+                totalHits: record.counter,
+                resetTime: record.expirationDate
+            });
+        }
     }
 
     private async incrementOrDecrement(key: string, byValue: number): Promise<MongoDBStoreEntry> {
@@ -93,7 +111,7 @@ export class MongoDBStore implements Store {
             $inc: {counter: byValue}
         };
 
-        const newExpiry = new Date(Date.now() + (this.storeOptions.expireTimeMs ?? 60000));
+        const newExpiry = new Date(Date.now() + (this.windowMs));
 
         modifier[this.storeOptions.resetExpireDateOnChange ? "$set" : "$setOnInsert"] = {expirationDate: newExpiry};
 
@@ -132,8 +150,6 @@ export class MongoDBStore implements Store {
                 for (let rslvRjct of this.resolveOrRejectOnCollectionCreation) {
                     rslvRjct[0](this.collection as Collection);
                 }
-
-                this.resolveOrRejectOnCollectionCreation = [];
             } catch (e) {
 
                 this.collectionState = "uninitialized";
@@ -144,8 +160,10 @@ export class MongoDBStore implements Store {
                     rslvRjct[1](e);
                 }
 
-                this.resolveOrRejectOnCollectionCreation = [];
+                
             }
+
+            this.resolveOrRejectOnCollectionCreation = [];
         });
     }
 
@@ -176,9 +194,7 @@ export class MongoDBStore implements Store {
         return collection;
     }
 
-    get?: ((key: string) => Promise<ClientRateLimitInfo | undefined> | ClientRateLimitInfo | undefined) | undefined;
     resetKey: (key: string) => Promise<void> | void;
     resetAll?: (() => Promise<void> | void) | undefined;
     shutdown?: (() => Promise<void> | void) | undefined;
-    localKeys?: boolean | undefined;
 }
