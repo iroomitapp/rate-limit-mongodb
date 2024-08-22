@@ -1,0 +1,4 @@
+{
+  "name": "rate-limit-mongodb",
+  "packageManager": "yarn@4.2.2"
+}
