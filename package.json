@@ -1,6 +1,6 @@
 {
   "name": "@iroomit/rate-limit-mongodb",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "MongoDB store for the Node.js express-rate-limit package.",
   "main": "dist/index.js",
   "types": "dist/index.d.js",

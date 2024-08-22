@@ -1,0 +1,8 @@
+.git/
+node_modules/
+src/
+tests/
+Dockerfile.test
+docker-compose.test.yml
+jest.config.js
+tsconfig.json
