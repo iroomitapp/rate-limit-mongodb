@@ -1,5 +1,7 @@
 # Rate Limit MongoDB Store
 
+[![Npm version](https://img.shields.io/npm/v/@iroomit/rate-limit-mongodb.svg)](https://www.npmjs.org/package/@iroomit/rate-limit-mongodb)
+
 MongoDB store for the [express-rate-limit](https://github.com/nfriedly/express-rate-limit) Node.js middleware package, used at [iROOMit](https://www.iroomit.com/).
 
 This package was heavily inspired by [2do2go/rate-limit-mongo](https://github.com/2do2go/rate-limit-mongo), but is not a direct fork. Development on [2do2go/rate-limit-mongo](https://github.com/2do2go/rate-limit-mongo) has been stalled for several years, and also relies on some dependencies that are unnecessary in modern Node.js.
