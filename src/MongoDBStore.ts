@@ -144,7 +144,7 @@ export class MongoDBStore implements Store {
 
         modifier[this.storeOptions.resetExpireDateOnChange ? "$set" : "$setOnInsert"] = {expirationDate: newExpiry};
 
-        const result = await collection.findOneAndUpdate({_id: this.prefixKey(key) as any}, modifier, {upsert: true, returnDocument: 'after'});
+        const result = await collection.findOneAndUpdate({_id: this.prefixKey(key) as any}, modifier, {upsert: true, returnDocument: 'after', includeResultMetadata: true});
         const record = result?.value as unknown as MongoDBStoreEntry;
 
         return record;
